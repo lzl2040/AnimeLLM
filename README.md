@@ -16,10 +16,8 @@ Logo由通义AI生成。
 
 ## 📺Demo
 
-<video width="640" height="360" controls>
-  <source src="doc/demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+<img src="doc/demo.gif" alt="Description" width="100%">
+
 
 ## 🧾数据准备
 
@@ -103,6 +101,6 @@ lmdeploy serve gradio /root/Project/ReceipeLLM/InternVL2-2B-Receipe --cache-max-
 
 解决办法：跟换transformers版本：transformers 4.37.2，[参考链接](https://github.com/OpenGVLab/InternVL/issues/405)
 
+## 😘鸣谢
 
-
-
+如果你也想做大模型，可以来这里了解：[书生浦语项目](https://github.com/InternLM/Tutorial)
