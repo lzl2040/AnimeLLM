@@ -1,7 +1,7 @@
 # 基于InternLM的中华食谱大模型🍲
 
 <div align="center">
-  <img src="https://github.com/lzl2040/RecipeLLM/blob/main/logo.png" width="1024"/>
+  <img src="logo.png" width="1024"/>
   <br /><br />
 </div>
 Logo由通义AI生成。
@@ -44,7 +44,9 @@ Logo由通义AI生成。
 
 ## 📺Demo
 
-<img src="doc/demo.gif" alt="Description" width="100%">
+项目讲解视频：[B站](https://www.bilibili.com/video/BV1YuWCeFEdc/?vd_source=7ebf2c374f0af4b51d940d164ecffcf7)
+
+<video width="320" height="240" controls>   <source src="doc/demo.mp4" type="video/mp4">   Your browser does not support the video tag. </video>
 
 ## 💻使用指南
 
@@ -124,7 +126,8 @@ lmdeploy serve gradio /root/Project/ReceipeLLM/InternVL2-2B-Receipe --cache-max-
 ## 😄更新说明
 
 - 8.16：使用2887条食品图像-文本数据进行微调
-- 8.23：使用6794条食品图像-文本数据进行微调InternVL2-4B
+- 8.23：使用6794条食品图像-文本数据进行微调
+- 8.25：使用23820条数据进行更详细的微调
 
 如果你想加一些颜文字，可以看这个网址：[地址](https://www.emojiall.com/zh-hans/emoji/%F0%9F%91%A8%F0%9F%8F%BF%E2%80%8D%F0%9F%8D%B3)
 
