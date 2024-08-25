@@ -1,9 +1,9 @@
 # 基于InternLM的中华食谱大模型🍲
 
 <div align="center">
-  <img src="logo.png" width="1024"/>
+  <img src="https://github.com/lzl2040/RecipeLLM/blob/main/logo.png" width="1024"/>
   <br /><br />
-
+</div>
 Logo由通义AI生成。
 
 ## 🚩目录
