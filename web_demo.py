@@ -95,6 +95,12 @@ def load_image(image_file, input_size=448, max_num=12):
     pixel_values = torch.stack(pixel_values)
     return pixel_values
 
+def load_upload_file_and_show(uploaded_file):
+    pixel_values = None
+    if uploaded_file is not None:
+        pixel_values = load_image(uploaded_file, max_num=12).to(torch.bfloat16).cuda()
+    return pixel_values
+
 @dataclass
 class GenerationConfig:
     max_length: int = 2048
@@ -139,25 +145,6 @@ def load_model():
                                               use_fast=False)
     return model, tokenizer
 
-def prepare_generation_config():
-    with st.sidebar:
-        st.image(logo, caption='', use_column_width=True)
-        max_length = st.slider('Max Length', min_value=8, max_value=32768, value=2048)
-        top_p = st.slider('Top P', 0.0, 1.0, 0.75, step=0.01)
-        temperature = st.slider('Temperature', 0.0, 1.0, 0.1, step=0.01)
-        st.button('清空聊天历史', on_click=on_btn_click)
-
-        # Image uploader in the sidebar
-        uploaded_image = st.file_uploader("上传一张图片", type=["jpg", "jpeg", "png"])
-        if uploaded_image is not None:
-            st.session_state.uploaded_image = uploaded_image
-
-    generation_config = GenerationConfig(max_length=max_length,
-                                         top_p=top_p,
-                                         temperature=temperature)
-
-    return generation_config
-
 user_prompt = 'user\n{user}\n'
 robot_prompt = 'assistant\n{robot}\n'
 cur_query_prompt = 'user\n{user}\n    assistant\n'
@@ -178,24 +165,94 @@ def combine_history(prompt):
     total_prompt = total_prompt + cur_query_prompt.format(user=prompt)
     return total_prompt
 
+def clear_file_uploader():
+    st.session_state.uploader_key += 1
+    # st.rerun()
+
 def main():
+    global pixel_values
     print('load model begin.')
     model, tokenizer = load_model()
     print('load model end.')
 
-    st.title('🍲中华食谱大模型🍲')
+    if 'uploader_key' not in st.session_state:
+        st.session_state.uploader_key = 0
+    
+    # 侧边栏
+    with st.sidebar:
+        st.image(logo, caption='', use_column_width=True)
+        lan = st.selectbox('#### Language / 语言', ['English', '中文'], on_change=st.rerun,
+                       help='This is only for switching the UI language. 这仅用于切换UI界面的语言。')
+        if lan == 'English':
+            with st.expander('🔥 Advanced Options'):
+                temperature = st.slider('temperature', min_value=0.0, max_value=1.0, value=0.7, step=0.1)
+                top_p = st.slider('top_p', min_value=0.0, max_value=1.0, value=0.95, step=0.05)
+                repetition_penalty = st.slider('repetition_penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.02)
+                max_length = st.slider('max_new_token', min_value=0, max_value=4096, value=1024, step=128)
+                max_input_tiles = st.slider('max_input_tiles (control image resolution)', min_value=1, max_value=24,
+                                            value=12, step=1)
+            st.button('Clear History', on_click=on_btn_click)
 
-    if 'show_image' not in st.session_state:
-        # print("update")
-        st.session_state.show_image = False
+            uploaded_image = st.file_uploader('Upload a file',
+                                          type=['png', 'jpg', 'jpeg', 'webp'],
+                                          help='You can upload an image',
+                                          key=f'uploader_{st.session_state.uploader_key}',
+                                          on_change=st.rerun)
+            todo_list = st.sidebar.selectbox('Our to-do list', ['👏This is our to-do list',
+                                        '1. More speed',
+                                        '2. Speech generation',
+                                        '3. More data for finetuning'], key='todo_list',
+                        help='Here are some features we plan to support in the future.')
+        else:
+            with st.expander('🔥 高级选项'):
+                temperature = st.slider('temperature', min_value=0.0, max_value=1.0, value=0.7, step=0.1)
+                top_p = st.slider('top_p', min_value=0.0, max_value=1.0, value=0.95, step=0.05)
+                repetition_penalty = st.slider('重复惩罚', min_value=1.0, max_value=1.5, value=1.1, step=0.02)
+                max_length = st.slider('最大输出长度', min_value=0, max_value=4096, value=1024, step=128)
+                max_input_tiles = st.slider('最大图像块数 (控制图像分辨率)', min_value=1, max_value=24, value=12, step=1)
+            st.button('清空聊天历史', on_click=on_btn_click)
 
-    generation_config = prepare_generation_config()
+            # 更新uploader_key有助于不重复输出图片
+            uploaded_image = st.file_uploader('上传一张图片',
+                                type=['png', 'jpg', 'jpeg', 'webp'],
+                                help='你可以上传一张图片',
+                                key=f'uploader_{st.session_state.uploader_key}',
+                                on_change=st.rerun)
 
+            todo_list = st.sidebar.selectbox('我们的待办事项', ['👏这里是我们的待办事项', '1. 更快推理速度',
+                                '2. 支持语音输出', '3. 更多数据用于微调'], key='todo_list',
+                    help='这是我们计划要支持的一些功能。')
+
+        # Image uploader in the sidebar
+        
+        pixel_values = load_upload_file_and_show(uploaded_image)
+        if pixel_values is not None:
+            st.session_state.uploaded_image = uploaded_image
+    
+    if lan == "English":
+        st.title("🍲Chinese Receipe Generation🍲")
+        sys_prompt = "Hello, I am the Chinese Cuisine Recipe Model 🍲. You can upload an image 🍳, and I will analyze how it was made."
+    else:
+        st.title('🍲中华食谱大模型🍲')
+        sys_prompt = "您好，我是中华食谱大模型🍲，您可以上传一张图片🍳，我会为您分析它是如何制作的。"
+    
+    # if 'messages' not in st.session_state:
+    #         st.session_state.messages = [{
+    #             'role': 'robot',
+    #             'content': sys_prompt
+    #         }]
+    # else:
     if 'messages' not in st.session_state:
         st.session_state.messages = [{
-            'role': 'robot',
-            'content': "您好，我是中华食谱大模型🍲，您可以上传一张图片🍳，我会为您分析它是如何制作的。",
+                'role': 'robot',
+                'content': sys_prompt
         }]
+    else:
+        st.session_state.messages[0]["content"] = sys_prompt
+
+    generation_config = GenerationConfig(max_length=max_length,
+                                         top_p=top_p,
+                                         temperature=temperature)
 
     for message in st.session_state.messages:
         with st.chat_message(message['role'], avatar=message.get('avatar')):
@@ -205,7 +262,11 @@ def main():
 
     
     # 监听用户输入
-    if prompt := st.chat_input('What is up?'):
+    if lan == "English":
+        prompt = st.chat_input('What is up?')
+    else:
+        prompt = st.chat_input('请上传食物图片，输入你想问的问题...')
+    if prompt:
         with st.chat_message('user'):
             # 输出内容
             st.markdown(prompt)
@@ -217,17 +278,21 @@ def main():
             'content': prompt
         }
 
-        if 'uploaded_image' in st.session_state:
+        if pixel_values != None:
             # st.text("add image")
-            
             user_message['image'] = st.session_state.uploaded_image
             st.image(user_message['image'], caption='', use_column_width=True)
-            image = Image.open(user_message['image'])
-            # 获取图片的宽度和高度
-            width, height = image.size
-            pixel_values = load_image(user_message['image'], max_num=12).to(torch.bfloat16).cuda()
-            # st.session_state.show_image = False
+            clear_file_uploader()
+        else:
+            # 没有上传图片，从之前的信息中找
+            for message in st.session_state.messages:
+                if "image" in message.keys():
+                    image = Image.open(message['image'])
+                    # 获取图片的宽度和高度
+                    pixel_values = load_image(message['image'], max_num=12).to(torch.bfloat16).cuda()
+                    break
         
+
         st.session_state.messages.append(user_message)
 
         with st.chat_message('robot'):
