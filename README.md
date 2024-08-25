@@ -38,7 +38,7 @@ Logo由通义AI生成。
 ![](/framework.png)
 
 ## 📺Demo
-
+目前是GIF动图，比较模糊，后续更新更清晰的视频。
 <img src="doc/demo.gif" alt="Description" width="100%">
 
 ## 💻使用指南
