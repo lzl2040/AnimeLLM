@@ -4,7 +4,8 @@
   <img src="logo.png" width="1024"/>
   <br /><br />
 </div>
-Logo由通义AI生成。
+
+Logo由[MidJourney](https://huggingface.co/spaces/mukaist/Midjourney)生成。
 
 ## 🚩目录
 
