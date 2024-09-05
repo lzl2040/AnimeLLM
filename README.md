@@ -1,7 +1,7 @@
 # 基于InternLM的中华食谱大模型🍲
 
 <div align="center">
-  <img src="logo.png" width="1024"/>
+  <img src="logo.png" width="512"/>
   <br /><br />
 </div>
 
