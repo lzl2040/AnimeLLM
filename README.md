@@ -127,8 +127,10 @@ lmdeploy serve gradio /root/Project/ReceipeLLM/InternVL2-2B-Receipe --cache-max-
 ## 😄更新说明
 
 - 8.16：使用2887条食品图像-文本数据进行微调
-- 8.23：使用6794条食品图像-文本数据进行微调
-- 8.25：使用23820条数据进行更详细的微调
+- 8.23：使用6794条食品图像-文本数据进行微调InternVL2-4B，推理速度比较慢
+- 8-31：加了文本的数据微调InternVL2-8B，推理速度很快，但感觉效果跟4B差不多，但会出现重复回复的现象，可能过拟合了
+- 9-3：加了文本的数据微调InterVL2-26B，推理速度也可以，但显存消耗大，效果也可以
+- 9-27: 支持[ChatTTS](https://huggingface.co/2Noise/ChatTTS)实现文本转语音（TTS），[FunASR](https://huggingface.co/FunAudioLLM/SenseVoiceSmall)实现语音转文本（ASR）
 
 如果你想加一些颜文字，可以看这个网址：[地址](https://www.emojiall.com/zh-hans/emoji/%F0%9F%91%A8%F0%9F%8F%BF%E2%80%8D%F0%9F%8D%B3)
 
@@ -136,6 +138,24 @@ lmdeploy serve gradio /root/Project/ReceipeLLM/InternVL2-2B-Receipe --cache-max-
 1、使用InternVL2-4B微调的模型进行推理时报错RuntimeError: shape '[-1, 0]' is invalid for input of size 77，但是InternVL2-2B不会，这确实是一个存在的问题：[Issue](https://www.modelscope.cn/models/OpenGVLab/InternVL2-4B/feedback/issueDetail/13820)
 
 解决办法：跟换transformers版本：transformers 4.37.2，[参考链接](https://github.com/OpenGVLab/InternVL/issues/405)
+
+2、4B模型生成过程会输出�，不稳定，且推理速度慢
+
+3、2B、4B模型不能准确识别食品种类，事实上，2B，4B，8B的视觉模型都是一样的
+
+4、多卡：Error: mkl-service + Intel(R) MKL: MKL_THREADING_LAYER=INTEL is incompatible with libgomp.so.1 library
+
+```
+export MKL_THREADING_LAYER=GNU
+```
+
+5、LMdeploy报错：RuntimeError: Current event loop is different from the one bound to loop task
+
+这个要等lmdeploy更新了，看能不能解决掉这个bug
+
+6、ChatTTS加载特定音色报错'Chat' object has no attribute '_encode_epk_emb'
+
+使用ChatTTS最新的源代码，然后解压，而不是pip
 
 ## 😘鸣谢
 
