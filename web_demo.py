@@ -15,6 +15,10 @@ from transformers import AutoModel, AutoTokenizer
 from PIL import Image
 from transformers import TextIteratorStreamer
 from threading import Thread
+import ChatTTS
+from audio_recorder_streamlit import audio_recorder
+from funasr import AutoModel as AutoModel_ASR
+from util.utils import *
 
 logger = logging.get_logger(__name__)
 
@@ -134,16 +138,43 @@ def generate_interactive(
 def on_btn_click():
     del st.session_state.messages
 
+def load_tts_model(speaker_type = None):
+    chat = ChatTTS.Chat()
+    # 使用本地下载好的，WebUI有说明怎么下载
+    chat.load(source = "custom", custom_path = "/root/model/ChatTTS")
+    # 加载音色
+    if speaker_type == None:
+        speaker = chat._encode_spk_emb(torch.load('./TTS/seed_1518_restored_emb.pt'))
+    else:
+        # 有音色参数传递
+        speaker = chat._encode_spk_emb(torch.load(speaker_type))
+
+    params_infer_code = ChatTTS.Chat.InferCodeParams(
+        spk_emb=speaker, # 声音模型
+    )
+    return chat, params_infer_code
+
 @st.cache_resource
 def load_model():
-    model = AutoModel.from_pretrained(
-        model_name_or_path,
-        torch_dtype=torch.bfloat16,
-        low_cpu_mem_usage=True,
-        trust_remote_code=True).eval().cuda()
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True,
-                                              use_fast=False)
-    return model, tokenizer
+    models = []
+    tokenizers = []
+    for model_name_or_path in model_name_or_paths:
+        model = AutoModel.from_pretrained(
+            model_name_or_path,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True).eval().cuda()
+        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True,
+                                                use_fast=False)
+        models.append(model)
+        tokenizers.append(tokenizer)
+    tts_model, params_infer_code = load_tts_model()
+    # chat = None
+    asr_model = AutoModel_ASR(model="/root/model/SenseVoiceSmall",
+                    vad_model="fsmn-vad",
+                    vad_kwargs={"max_single_segment_time": 30000},
+                    trust_remote_code=True, device="cuda:0")
+    return models, tokenizers, tts_model, asr_model, params_infer_code
 
 user_prompt = 'user\n{user}\n'
 robot_prompt = 'assistant\n{robot}\n'
@@ -172,18 +203,26 @@ def clear_file_uploader():
 def main():
     global pixel_values
     print('load model begin.')
-    model, tokenizer = load_model()
+    models, tokenizers, tts_model, asr_model, speaker_mode = load_model()
     print('load model end.')
 
     if 'uploader_key' not in st.session_state:
         st.session_state.uploader_key = 0
     
     # 侧边栏
+    model_list = ["4B-Receipe", "4B", "2B-Receipe", "2B"]
     with st.sidebar:
+        # model_list, tokenizer_list = load_model()
         st.image(logo, caption='', use_column_width=True)
+        
         lan = st.selectbox('#### Language / 语言', ['English', '中文'], on_change=st.rerun,
                        help='This is only for switching the UI language. 这仅用于切换UI界面的语言。')
+        
+        
         if lan == 'English':
+            selected_model = st.sidebar.selectbox('Choose a InternVL2 chat model', model_list, key='selected_model',
+                                              on_change=on_btn_click,
+                                              help='Due to the limited GPU resources with public IP addresses, we can currently only deploy models up to a maximum of 4B.')
             with st.expander('🔥 Advanced Options'):
                 temperature = st.slider('temperature', min_value=0.0, max_value=1.0, value=0.7, step=0.1)
                 top_p = st.slider('top_p', min_value=0.0, max_value=1.0, value=0.95, step=0.05)
@@ -198,18 +237,20 @@ def main():
                                           help='You can upload an image',
                                           key=f'uploader_{st.session_state.uploader_key}',
                                           on_change=st.rerun)
-            todo_list = st.sidebar.selectbox('Our to-do list', ['👏This is our to-do list',
-                                        '1. More speed',
-                                        '2. Speech generation',
-                                        '3. More data for finetuning'], key='todo_list',
-                        help='Here are some features we plan to support in the future.')
+           
         else:
+            
+            selected_model = st.sidebar.selectbox('选择一个 InternVL2 对话模型', model_list, key='selected_model',
+                                              on_change=on_btn_click,
+                                              help='由于有限的公网GPU资源，我们暂时只能部署到最大参数4B的模型。')
+
             with st.expander('🔥 高级选项'):
                 temperature = st.slider('temperature', min_value=0.0, max_value=1.0, value=0.7, step=0.1)
                 top_p = st.slider('top_p', min_value=0.0, max_value=1.0, value=0.95, step=0.05)
                 repetition_penalty = st.slider('重复惩罚', min_value=1.0, max_value=1.5, value=1.1, step=0.02)
                 max_length = st.slider('最大输出长度', min_value=0, max_value=4096, value=1024, step=128)
                 max_input_tiles = st.slider('最大图像块数 (控制图像分辨率)', min_value=1, max_value=24, value=12, step=1)
+            # 存在一个bug，如果先语音输入，语音输入清除不了
             st.button('清空聊天历史', on_click=on_btn_click)
 
             # 更新uploader_key有助于不重复输出图片
@@ -219,29 +260,39 @@ def main():
                                 key=f'uploader_{st.session_state.uploader_key}',
                                 on_change=st.rerun)
 
-            todo_list = st.sidebar.selectbox('我们的待办事项', ['👏这里是我们的待办事项', '1. 更快推理速度',
-                                '2. 支持语音输出', '3. 更多数据用于微调'], key='todo_list',
-                    help='这是我们计划要支持的一些功能。')
+            
+
+        # 语音输入
+        cols = st.columns(3)
+        with cols[1]:
+            print("重新运行audio_recorder函数")
+            audio_bytes = audio_recorder(
+                text="",
+                recording_color="#e8b62c",
+                neutral_color="#6aa36f",
+                icon_name="microphone",
+                icon_size="3x",
+                pause_threshold=2.5,
+                sample_rate=24000
+            )
+
+        # 加载模型
+        model_id = model_list.index(selected_model)
+        
+        model, tokenizer = models[model_id], tokenizers[model_id]
 
         # Image uploader in the sidebar
-        
         pixel_values = load_upload_file_and_show(uploaded_image)
         if pixel_values is not None:
             st.session_state.uploaded_image = uploaded_image
     
     if lan == "English":
-        st.title("🍲Chinese Receipe Generation🍲")
+        st.title("🍲Chinese Recipe Generation🍲")
         sys_prompt = "Hello, I am the Chinese Cuisine Recipe Model 🍲. You can upload an image 🍳, and I will analyze how it was made."
     else:
         st.title('🍲中华食谱大模型🍲')
         sys_prompt = "您好，我是中华食谱大模型🍲，您可以上传一张图片🍳，我会为您分析它是如何制作的。"
     
-    # if 'messages' not in st.session_state:
-    #         st.session_state.messages = [{
-    #             'role': 'robot',
-    #             'content': sys_prompt
-    #         }]
-    # else:
     if 'messages' not in st.session_state:
         st.session_state.messages = [{
                 'role': 'robot',
@@ -259,6 +310,12 @@ def main():
             st.markdown(message['content'])
             if "image" in message.keys():
                 st.image(message['image'], caption='', use_column_width=True)
+            
+            if "wav" in message.keys():
+                st.audio(message["wav"], sample_rate=24000)
+            
+            if "wav_path" in message.keys():
+                st.audio(message["wav_path"], format="wav")
 
     
     # 监听用户输入
@@ -270,8 +327,6 @@ def main():
         with st.chat_message('user'):
             # 输出内容
             st.markdown(prompt)
-        
-        # real_prompt = combine_history(prompt)
 
         user_message = {
             'role': 'user',
@@ -284,14 +339,15 @@ def main():
             st.image(user_message['image'], caption='', use_column_width=True)
             clear_file_uploader()
         else:
-            # 没有上传图片，从之前的信息中找
-            for message in st.session_state.messages:
+            # 没有上传图片，从之前的信息中找，从后往前
+            m_len = len(st.session_state.messages)
+            for id in range(m_len - 1, -1, -1):
+                message = st.session_state.messages[id]
                 if "image" in message.keys():
                     image = Image.open(message['image'])
                     # 获取图片的宽度和高度
                     pixel_values = load_image(message['image'], max_num=12).to(torch.bfloat16).cuda()
                     break
-        
 
         st.session_state.messages.append(user_message)
 
@@ -305,13 +361,83 @@ def main():
                     **asdict(generation_config),
             ):
                 message_placeholder.markdown(cur_response + '▌')
+                # gen_text = gen_text + cur_response
+            # list
+            wav = tts_model.infer(cur_response, params_infer_code=speaker_mode)
+            # print(type(wav))
+            with st.spinner("请稍等..."):
+                st.audio(wav[0], sample_rate=24000)
             message_placeholder.markdown(cur_response)
         
         st.session_state.messages.append({
             'role': 'robot',
             'content': cur_response,
+            'wav' : wav[0]
         })
+    elif (audio_bytes != None) and pixel_values == None:
+        save_voice_path = save_wavs(audio_bytes)
+        print("audio_bytes是否为空", audio_bytes == None)
+        with st.spinner():
+            voice_prompt = audio2text(asr_model, save_voice_path)
+        if voice_prompt:
+            with st.chat_message('user'):
+                # 展示用户输入的问题
+                st.markdown(voice_prompt)
+                # 展示用户的语音输入
+                st.audio(save_voice_path, sample_rate=24000)
+        
+        user_message = {
+            'role': 'user',
+            'content': voice_prompt,
+            'wav_path' : save_voice_path
+        }
 
+        if pixel_values != None:
+            # st.text("add image")
+            user_message['image'] = st.session_state.uploaded_image
+            st.image(user_message['image'], caption='', use_column_width=True)
+            clear_file_uploader()
+        else:
+            # 没有上传图片，从之前的信息中找，从后往前
+            m_len = len(st.session_state.messages)
+            for id in range(m_len - 1, -1, -1):
+            # for message in st.session_state.messages:
+                message = st.session_state.messages[id]
+                if "image" in message.keys():
+                    image = Image.open(message['image'])
+                    # 获取图片的宽度和高度
+                    pixel_values = load_image(message['image'], max_num=12).to(torch.bfloat16).cuda()
+                    break
+
+        st.session_state.messages.append(user_message)
+
+        # 如果要实现上下文，可以再这里拼接历史消息
+
+        with st.chat_message('robot'):
+            message_placeholder = st.empty()
+            for cur_response in generate_interactive(
+                    model=model,
+                    tokenizer=tokenizer,
+                    prompt=voice_prompt,
+                    pixel_values = pixel_values,
+                    **asdict(generation_config),
+            ):
+                message_placeholder.markdown(cur_response + '▌')
+            # list
+            wav = tts_model.infer(cur_response, params_infer_code=speaker_mode)
+            with st.spinner("请稍等..."):
+                st.audio(wav[0], sample_rate=24000)
+            message_placeholder.markdown(cur_response)
+        
+        st.session_state.messages.append({
+            'role': 'robot',
+            'content': cur_response,
+            'wav' : wav[0]
+        })
+        audio_bytes = None
+
+        
+
+        
 if __name__ == '__main__':
     main()
-
